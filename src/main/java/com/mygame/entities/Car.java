@@ -23,11 +23,20 @@ public class Car implements Subject {
 
     private boolean drifting = false;
 
-    private float speedBoost = 1f;
-    private float driftFactor = 1f;
+    // 🚗 velocidad real acumulada
+    private float currentSpeed = 0f;
 
-    // 🚗 INERCIA (IMPORTANTE PARA “SUELTO”)
-    private Vector3f velocity = new Vector3f(0, 0, 0);
+    // límites estilo arcade/forza
+    private float maxSpeed = 140f;
+    private float maxReverseSpeed = 70f;
+
+    private float acceleration = 55f;   // qué tan rápido sube velocidad
+    private float brakePower = 90f;     // frenado
+    private float drag = 10f;           // fricción natural
+
+    private float speedBoost = 1f;
+
+    private float driftFactor = 1f;
 
     private ParticleEmitter smoke;
 
@@ -54,7 +63,6 @@ public class Car implements Subject {
         createSmoke();
     }
 
-    // 🚗 MOVIMIENTO SUELTO (ARCADE REAL)
     public void move(
             boolean forward,
             boolean backward,
@@ -62,42 +70,52 @@ public class Car implements Subject {
             boolean right,
             float tpf) {
 
-        float speed = strategy.getSpeed() * speedBoost;
         float rotation = strategy.getRotationSpeed();
 
-        // 💨 DRIFT SYSTEM
+        // 💨 drift tuning
         if (drifting) {
             rotation = 6.5f;
-            driftFactor = 0.5f;
+            driftFactor = 0.65f;
             smoke.setParticlesPerSec(25);
         } else {
             driftFactor = 1f;
             smoke.setParticlesPerSec(0);
         }
 
-        // 🧠 DIRECCIÓN
-        Vector3f forwardDir = carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
-
-        Vector3f input = new Vector3f(0, 0, 0);
-
-        if (forward) input.addLocal(forwardDir);
-        if (backward) input.addLocal(forwardDir.negate());
-
-        if (input.lengthSquared() > 0) {
-            input.normalizeLocal().multLocal(speed);
+        // 🧠 ACELERACIÓN REAL (FORZA STYLE)
+        if (forward) {
+            currentSpeed += acceleration * tpf;
+        } else if (backward) {
+            currentSpeed -= brakePower * tpf;
+        } else {
+            // 🧊 desaceleración natural
+            if (currentSpeed > 0) {
+                currentSpeed -= drag * tpf;
+                if (currentSpeed < 0) currentSpeed = 0;
+            } else {
+                currentSpeed += drag * tpf;
+                if (currentSpeed > 0) currentSpeed = 0;
+            }
         }
 
-        // 🚗 INERCIA (CLAVE DEL “SUELTO”)
-        velocity.interpolateLocal(input, tpf * 3.0f);
+        // 🚧 límites
+        currentSpeed = FastMath.clamp(
+                currentSpeed,
+                -maxReverseSpeed,
+                maxSpeed
+        );
 
-        // 🧊 FRICCIÓN
-        float friction = drifting ? 2.2f : 4.5f;
-        velocity.multLocal(1f - (friction * tpf));
+        // 🧭 dirección del carro
+        Vector3f forwardDir =
+                carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
 
-        // 🚗 APLICAR MOVIMIENTO
-        carNode.move(velocity.mult(tpf * driftFactor));
+        // 🚗 movimiento final
+        Vector3f movement =
+                forwardDir.mult(currentSpeed * tpf * driftFactor);
 
-        // 🔁 ROTACIÓN SUAVE
+        carNode.move(movement);
+
+        // 🔁 rotación
         if (left) {
             carNode.rotate(0, rotation * tpf, 0);
         }
@@ -105,8 +123,8 @@ public class Car implements Subject {
             carNode.rotate(0, -rotation * tpf, 0);
         }
 
-        // 🖤 SKIDMARKS SOLO EN DRIFT
-        if (drifting && forward && Math.random() > 0.6) {
+        // 💨 skid only drift
+        if (drifting && Math.abs(currentSpeed) > 10 && Math.random() > 0.6) {
             createSkidMark(carNode.getWorldTranslation().clone());
         }
 
@@ -116,15 +134,17 @@ public class Car implements Subject {
 
     // 🚀 BOOST
     public void accelerate() {
-        speedBoost = 10f;
+        currentSpeed = Math.min(currentSpeed + 10f, maxSpeed * 1.4f);
     }
 
-    // 💨 DRIFT
     public void setDrifting(boolean drifting) {
         this.drifting = drifting;
     }
 
-    // 💨 HUMO
+    public float getSpeed() {
+        return currentSpeed;
+    }
+
     private void createSmoke() {
 
         smoke = new ParticleEmitter("Smoke", ParticleMesh.Type.Triangle, 60);
@@ -155,10 +175,9 @@ public class Car implements Subject {
         carNode.attachChild(smoke);
     }
 
-    // 🖤 SKID MARKS
     private void createSkidMark(Vector3f pos) {
 
-        Box b = new Box(0.2f, 0.1f, 0.6f);
+        Box b = new Box(0.2f, 0.05f, 0.6f);
         Geometry g = new Geometry("skid", b);
 
         Material mat = new Material(assetManager,
@@ -167,7 +186,7 @@ public class Car implements Subject {
         mat.setColor("Color", new ColorRGBA(0, 0, 0, 0.8f));
 
         g.setMaterial(mat);
-        g.setLocalTranslation(pos.x, 0.1f, pos.z);
+        g.setLocalTranslation(pos.x, 0.05f, pos.z);
 
         if (carNode.getParent() != null) {
             carNode.getParent().attachChild(g);
@@ -184,7 +203,7 @@ public class Car implements Subject {
     @Override
     public void notifyObservers() {
         for (Observer observer : observers) {
-            observer.update(strategy.getSpeed());
+            observer.update(getSpeed());
         }
     }
 

@@ -88,4 +88,9 @@ public class CameraManager {
 
         cam.setLocation(smoothCam);
     }
+
+    public int getCameraMode() {
+    return cameraMode;
+}
+
 }

@@ -15,12 +15,16 @@ import com.jme3.util.SkyFactory;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.Spatial;
 
+import com.mygame.ui.Hud;
+import com.jme3.font.BitmapFont;
+
 public class Main extends SimpleApplication {
 
     private Car car;
     private InputHandler inputHandler;
     private CameraManager cameraManager;
     private GameState gameState;
+    private Hud hud;
 
     public static void main(String[] args) {
         new Main().start();
@@ -28,7 +32,9 @@ public class Main extends SimpleApplication {
 
     @Override
     public void simpleInitApp() {
+        BitmapFont font = assetManager.loadFont("Interface/Fonts/Default.fnt");
 
+        hud = new Hud(font, guiNode, cam);
         gameState = new PlayState();
 
         // 🌤 SKY
@@ -80,5 +86,11 @@ public class Main extends SimpleApplication {
                 car,
                 inputHandler.isChangeCameraPressed()
         );
+        
+        hud.update(
+        car.getSpeed(),   // si no tienes speed, te lo arreglo abajo
+        inputHandler.isDrifting(),
+        cameraManager.getCameraMode()
+);
     }
 }
