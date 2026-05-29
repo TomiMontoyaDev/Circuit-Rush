@@ -1,16 +1,23 @@
 package com.mygame.builder;
 
 import com.jme3.asset.AssetManager;
-import com.jme3.material.Material;
-import com.jme3.math.ColorRGBA;
-import com.jme3.scene.Geometry;
+import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
-import com.jme3.scene.shape.Box;
+import com.jme3.scene.Spatial;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class TrackBuilder {
 
     private final AssetManager assetManager;
     private final Node rootNode;
+
+    // 🎮 gameplay data
+    private final List<Vector3f> checkpoints = new ArrayList<>();
+    private final List<Vector3f> boostPads = new ArrayList<>();
+
+    private Spatial map;
 
     public TrackBuilder(AssetManager assetManager, Node rootNode) {
         this.assetManager = assetManager;
@@ -19,117 +26,52 @@ public class TrackBuilder {
 
     public void build() {
 
-        createGround();
-        createTrack();
-        createWalls();
-        createFinishLine();
+        loadMap();
+        setupGameplayPoints();
 
-        System.out.println("🏁 ARCADE TRACK READY");
+        System.out.println("🏁 DRIFT TRACK LOADED");
     }
 
-    // 🌍 PASTO INFINITO
-    private void createGround() {
+    // 🗺️ CARGAR MAPA REAL
+    private void loadMap() {
 
-        Box ground = new Box(600, 0.1f, 600);
-        Geometry g = new Geometry("Ground", ground);
+        map = assetManager.loadModel("Scenes/driftracetrack.glb");
 
-        Material mat = new Material(assetManager,
-                "Common/MatDefs/Misc/Unshaded.j3md");
+        map.setLocalTranslation(0, 0, 0);
+        map.setLocalScale(1.0f); // ajusta aquí si está grande/pequeño
 
-        mat.setColor("Color", new ColorRGBA(0.08f, 0.55f, 0.08f, 1f));
-
-        g.setMaterial(mat);
-        g.setLocalTranslation(0, -0.2f, 0);
-
-        rootNode.attachChild(g);
+        rootNode.attachChild(map);
     }
 
-    // 🛣️ LOOP PRINCIPAL REAL
-    private void createTrack() {
+    // 📍 PUNTOS DE JUEGO (BASADOS EN EL MAPA)
+    private void setupGameplayPoints() {
 
-        float y = 0.05f;
+        // 🏁 START / FINISH
+        checkpoints.add(new Vector3f(0, 0, 0));
 
-        // recta inferior
-        road("R1", 0, 0, 200, 20, y);
+        // 📍 CHECKPOINTS MANUALES (ajústalos al track real)
+        checkpoints.add(new Vector3f(80, 0, 40));
+        checkpoints.add(new Vector3f(160, 0, 0));
+        checkpoints.add(new Vector3f(80, 0, -40));
+        checkpoints.add(new Vector3f(-80, 0, -40));
+        checkpoints.add(new Vector3f(-160, 0, 0));
+        checkpoints.add(new Vector3f(-80, 0, 40));
 
-        // curva derecha
-        road("R2", 220, 120, 40, 120, y);
-
-        // recta derecha
-        road("R3", 200, 240, 20, 200, y);
-
-        // curva superior
-        road("R4", 0, 360, 200, 20, y);
-
-        // recta izquierda
-        road("R5", -220, 240, 20, 200, y);
-
-        // curva izquierda
-        road("R6", -200, 120, 40, 120, y);
+        // ⚡ BOOSTS
+        boostPads.add(new Vector3f(60, 0, 20));
+        boostPads.add(new Vector3f(-60, 0, -20));
     }
 
-    private void road(String name, float x, float z, float sx, float sz, float y) {
-
-        Box b = new Box(sx, 0.1f, sz);
-        Geometry g = new Geometry(name, b);
-
-        Material mat = new Material(assetManager,
-                "Common/MatDefs/Misc/Unshaded.j3md");
-
-        mat.setColor("Color", ColorRGBA.DarkGray);
-
-        g.setMaterial(mat);
-        g.setLocalTranslation(x, y, z);
-
-        rootNode.attachChild(g);
+    // 📍 GETTERS
+    public List<Vector3f> getCheckpoints() {
+        return checkpoints;
     }
 
-    // 🧱 PAREDES SIGUIENDO LA PISTA
-    private void createWalls() {
-
-        float h = 4f;
-
-        // borde exterior simple (limpia sensación racing)
-        for (int i = -250; i <= 250; i += 30) {
-
-            wall(i, -20, h);
-            wall(i, 400, h);
-
-            wall(-250, i, h);
-            wall(250, i, h);
-        }
+    public List<Vector3f> getBoostPads() {
+        return boostPads;
     }
 
-    private void wall(float x, float z, float h) {
-
-        Box b = new Box(4, h, 4);
-        Geometry g = new Geometry("Wall", b);
-
-        Material mat = new Material(assetManager,
-                "Common/MatDefs/Misc/Unshaded.j3md");
-
-        mat.setColor("Color", new ColorRGBA(0.25f, 0.25f, 0.25f, 1f));
-
-        g.setMaterial(mat);
-        g.setLocalTranslation(x, h, z);
-
-        rootNode.attachChild(g);
-    }
-
-    // 🏁 META REAL EN INICIO
-    private void createFinishLine() {
-
-        Box finish = new Box(30, 0.2f, 3);
-        Geometry g = new Geometry("Finish", finish);
-
-        Material mat = new Material(assetManager,
-                "Common/MatDefs/Misc/Unshaded.j3md");
-
-        mat.setColor("Color", ColorRGBA.White);
-
-        g.setMaterial(mat);
-        g.setLocalTranslation(0, 0.3f, 0);
-
-        rootNode.attachChild(g);
+    public Spatial getMap() {
+        return map;
     }
 }
