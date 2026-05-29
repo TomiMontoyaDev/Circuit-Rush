@@ -18,47 +18,52 @@ public class Car implements Subject {
 
     private final AssetManager assetManager;
 
-    private Node carNode;
-    private DrivingStrategy strategy;
+    private final Node carNode;
+    private final Node wheelsNode;
 
+    private DrivingStrategy strategy;
     private boolean drifting = false;
 
-    // 🚗 velocidad real acumulada
     private float currentSpeed = 0f;
-
-    // límites estilo arcade/forza
     private float maxSpeed = 140f;
     private float maxReverseSpeed = 70f;
 
-    private float acceleration = 55f;   // qué tan rápido sube velocidad
-    private float brakePower = 90f;     // frenado
-    private float drag = 10f;           // fricción natural
-
-    private float speedBoost = 1f;
+    private float acceleration = 55f;
+    private float brakePower = 90f;
+    private float drag = 10f;
 
     private float driftFactor = 1f;
 
     private ParticleEmitter smoke;
 
-    private List<Observer> observers = new ArrayList<>();
-    private List<Geometry> skidMarks = new ArrayList<>();
+    private final List<Observer> observers = new ArrayList<>();
+    private final List<Geometry> skidMarks = new ArrayList<>();
 
     public Car(AssetManager assetManager) {
 
         this.assetManager = assetManager;
-
-        strategy = new ArcadeDrive();
+        this.strategy = new ArcadeDrive();
 
         carNode = new Node("Car");
+        wheelsNode = new Node("RearWheelsFX");
 
-        Spatial carModel = assetManager.loadModel(
-                "Models/Convertible.glb"
-        );
+        Spatial carModel = assetManager.loadModel("Models/Convertible.glb");
 
-        carModel.scale(1f);
+        carModel.setLocalScale(3.0f);
+        carModel.center();
+
         carNode.attachChild(carModel);
 
-        carNode.setLocalTranslation(0, 1, 0);
+        // SPAWN POSICIÓN
+        carNode.setLocalTranslation(-262, 5f, 420);
+
+        // FIX IMPORTANTE: ROTACIÓN DEL SPAWN
+        carNode.setLocalRotation(
+                new Quaternion().fromAngles(0, FastMath.PI, 0)
+        );
+
+        wheelsNode.setLocalTranslation(0, 0, 0);
+        carNode.attachChild(wheelsNode);
 
         createSmoke();
     }
@@ -72,23 +77,20 @@ public class Car implements Subject {
 
         float rotation = strategy.getRotationSpeed();
 
-        // 💨 drift tuning
         if (drifting) {
             rotation = 6.5f;
             driftFactor = 0.65f;
-            smoke.setParticlesPerSec(25);
+            smoke.setParticlesPerSec(35);
         } else {
             driftFactor = 1f;
             smoke.setParticlesPerSec(0);
         }
 
-        // 🧠 ACELERACIÓN REAL (FORZA STYLE)
         if (forward) {
             currentSpeed += acceleration * tpf;
         } else if (backward) {
             currentSpeed -= brakePower * tpf;
         } else {
-            // 🧊 desaceleración natural
             if (currentSpeed > 0) {
                 currentSpeed -= drag * tpf;
                 if (currentSpeed < 0) currentSpeed = 0;
@@ -98,43 +100,39 @@ public class Car implements Subject {
             }
         }
 
-        // 🚧 límites
-        currentSpeed = FastMath.clamp(
-                currentSpeed,
-                -maxReverseSpeed,
-                maxSpeed
-        );
+        currentSpeed = FastMath.clamp(currentSpeed, -maxReverseSpeed, maxSpeed);
 
-        // 🧭 dirección del carro
         Vector3f forwardDir =
                 carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
 
-        // 🚗 movimiento final
         Vector3f movement =
                 forwardDir.mult(currentSpeed * tpf * driftFactor);
 
         carNode.move(movement);
 
-        // 🔁 rotación
-        if (left) {
-            carNode.rotate(0, rotation * tpf, 0);
-        }
-        if (right) {
-            carNode.rotate(0, -rotation * tpf, 0);
-        }
+        if (left) carNode.rotate(0, rotation * tpf, 0);
+        if (right) carNode.rotate(0, -rotation * tpf, 0);
 
-        // 💨 skid only drift
-        if (drifting && Math.abs(currentSpeed) > 10 && Math.random() > 0.6) {
-            createSkidMark(carNode.getWorldTranslation().clone());
+        if (drifting && Math.abs(currentSpeed) > 10 && Math.random() > 0.5) {
+
+            Vector3f rearOffset =
+                    carNode.getLocalRotation()
+                            .mult(new Vector3f(0, 0, -2.0f));
+
+            createSkidMark(
+                    carNode.getWorldTranslation().add(rearOffset)
+            );
         }
 
         notifyObservers();
-        speedBoost = 1f;
     }
 
-    // 🚀 BOOST
     public void accelerate() {
-        currentSpeed = Math.min(currentSpeed + 10f, maxSpeed * 1.4f);
+        currentSpeed = FastMath.clamp(
+                currentSpeed + 25f,
+                -maxReverseSpeed,
+                maxSpeed * 1.4f
+        );
     }
 
     public void setDrifting(boolean drifting) {
@@ -145,23 +143,24 @@ public class Car implements Subject {
         return currentSpeed;
     }
 
+    public Node getNode() {
+        return carNode;
+    }
+
     private void createSmoke() {
 
-        smoke = new ParticleEmitter("Smoke", ParticleMesh.Type.Triangle, 60);
+        smoke = new ParticleEmitter("Smoke", ParticleMesh.Type.Triangle, 80);
 
         Material mat = new Material(assetManager,
                 "Common/MatDefs/Misc/Particle.j3md");
 
         smoke.setMaterial(mat);
 
-        smoke.setImagesX(2);
-        smoke.setImagesY(2);
-
         smoke.setStartColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0.6f));
         smoke.setEndColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0f));
 
-        smoke.setStartSize(0.8f);
-        smoke.setEndSize(3.5f);
+        smoke.setStartSize(1.2f);
+        smoke.setEndSize(4.0f);
 
         smoke.setLowLife(0.4f);
         smoke.setHighLife(1.5f);
@@ -170,14 +169,15 @@ public class Car implements Subject {
 
         smoke.setParticlesPerSec(0);
 
-        smoke.setLocalTranslation(0, 0.4f, -3f);
+        smoke.setLocalTranslation(0f, 0.3f, -2.5f);
 
-        carNode.attachChild(smoke);
+        wheelsNode.attachChild(smoke);
     }
 
     private void createSkidMark(Vector3f pos) {
 
-        Box b = new Box(0.2f, 0.05f, 0.6f);
+        Box b = new Box(0.35f, 0.01f, 2.0f);
+
         Geometry g = new Geometry("skid", b);
 
         Material mat = new Material(assetManager,
@@ -186,7 +186,8 @@ public class Car implements Subject {
         mat.setColor("Color", new ColorRGBA(0, 0, 0, 0.8f));
 
         g.setMaterial(mat);
-        g.setLocalTranslation(pos.x, 0.05f, pos.z);
+
+        g.setLocalTranslation(pos.x, 0.02f, pos.z);
 
         if (carNode.getParent() != null) {
             carNode.getParent().attachChild(g);
@@ -202,12 +203,8 @@ public class Car implements Subject {
 
     @Override
     public void notifyObservers() {
-        for (Observer observer : observers) {
-            observer.update(getSpeed());
+        for (Observer o : observers) {
+            o.update(getSpeed());
         }
-    }
-
-    public Node getNode() {
-        return carNode;
     }
 }

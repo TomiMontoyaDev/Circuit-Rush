@@ -70,8 +70,10 @@ public void update(float tpf) {
     hud.update(
         car.getSpeed(),
         input.isDrifting(),
-        camera.getCameraMode()
-    );
+        camera.getCameraMode(),
+        car.getNode().getWorldTranslation()
+);
+
 }
 
     @Override protected void onEnable() {}

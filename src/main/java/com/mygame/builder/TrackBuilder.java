@@ -38,7 +38,7 @@ public class TrackBuilder {
         map = assetManager.loadModel("Scenes/driftracetrack.glb");
 
         map.setLocalTranslation(0, 0, 0);
-        map.setLocalScale(1.0f); // ajusta aquí si está grande/pequeño
+        map.setLocalScale(5f); // ajusta aquí si está grande/pequeño
 
         rootNode.attachChild(map);
     }

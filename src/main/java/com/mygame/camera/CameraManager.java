@@ -43,14 +43,14 @@ public class CameraManager {
         if (cameraMode == 0) {
 
             camPos = carPos
-                    .subtract(forwardDir.mult(20))
+                    .subtract(forwardDir.mult(40))
                     .add(0, 8, 0);
         }
 
         else if (cameraMode == 1) {
 
             camPos = carPos
-                    .subtract(forwardDir.mult(35))
+                    .subtract(forwardDir.mult(60))
                     .add(0, 15, 0);
         }
 
@@ -62,8 +62,8 @@ public class CameraManager {
         else{
 
             camPos = carPos
-                    .add(forwardDir.mult(20))
-                    .add(0, 4, 0);
+                    .add(forwardDir.mult(50))
+                    .add(0, 5, 0);
         }
 
         smoothCamera(camPos);
