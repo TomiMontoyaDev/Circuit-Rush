@@ -71,7 +71,8 @@ public void update(float tpf) {
         car.getSpeed(),
         input.isDrifting(),
         camera.getCameraMode(),
-        car.getNode().getWorldTranslation()
+        car.getNode().getWorldTranslation(),
+        car.getDriftScore()
 );
 
 }

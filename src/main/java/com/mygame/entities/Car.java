@@ -32,9 +32,13 @@ public class Car implements Subject {
     private float brakePower = 90f;
     private float drag = 10f;
 
+    private float driftScore = 0f;
+    private float driftTime = 0f;
+
     private float driftFactor = 1f;
 
-    private ParticleEmitter smoke;
+    private ParticleEmitter smokeL;
+    private ParticleEmitter smokeR;
 
     private final List<Observer> observers = new ArrayList<>();
     private final List<Geometry> skidMarks = new ArrayList<>();
@@ -54,15 +58,15 @@ public class Car implements Subject {
 
         carNode.attachChild(carModel);
 
-        // SPAWN POSICIÓN
+        // 🚗 SPAWN (NO TOCADO COMO PEDISTE)
         carNode.setLocalTranslation(-262, 5f, 420);
 
-        // FIX IMPORTANTE: ROTACIÓN DEL SPAWN
+        // 🧭 ORIENTACIÓN INICIAL
         carNode.setLocalRotation(
                 new Quaternion().fromAngles(0, FastMath.PI, 0)
         );
 
-        wheelsNode.setLocalTranslation(0, 0, 0);
+        // 🎯 nodo de efectos alineado al carro
         carNode.attachChild(wheelsNode);
 
         createSmoke();
@@ -77,15 +81,22 @@ public class Car implements Subject {
 
         float rotation = strategy.getRotationSpeed();
 
+        // 💨 DRIFT MODE
         if (drifting) {
             rotation = 6.5f;
             driftFactor = 0.65f;
-            smoke.setParticlesPerSec(35);
+
+            smokeL.setParticlesPerSec(35);
+            smokeR.setParticlesPerSec(35);
+
         } else {
             driftFactor = 1f;
-            smoke.setParticlesPerSec(0);
+
+            smokeL.setParticlesPerSec(0);
+            smokeR.setParticlesPerSec(0);
         }
 
+        // 🚀 SPEED
         if (forward) {
             currentSpeed += acceleration * tpf;
         } else if (backward) {
@@ -102,6 +113,7 @@ public class Car implements Subject {
 
         currentSpeed = FastMath.clamp(currentSpeed, -maxReverseSpeed, maxSpeed);
 
+        // 🚗 MOVIMIENTO
         Vector3f forwardDir =
                 carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
 
@@ -110,10 +122,12 @@ public class Car implements Subject {
 
         carNode.move(movement);
 
+        // 🔁 ROTACIÓN
         if (left) carNode.rotate(0, rotation * tpf, 0);
         if (right) carNode.rotate(0, -rotation * tpf, 0);
 
-        if (drifting && Math.abs(currentSpeed) > 10 && Math.random() > 0.5) {
+        // 🛞 SKID REAL (ruedas traseras)
+        if (drifting && Math.abs(currentSpeed) > 10f && Math.random() > 0.5f) {
 
             Vector3f rearOffset =
                     carNode.getLocalRotation()
@@ -122,6 +136,22 @@ public class Car implements Subject {
             createSkidMark(
                     carNode.getWorldTranslation().add(rearOffset)
             );
+        }
+
+        // 🏁 DRIFT SCORE (limpio y estable)
+        if (drifting && Math.abs(currentSpeed) > 15f) {
+
+            driftTime += tpf;
+
+            float speedFactor = Math.abs(currentSpeed) / maxSpeed;
+            driftScore += speedFactor * speedFactor * 120f * tpf;
+
+        } else {
+
+            driftScore -= 30f * tpf;
+            if (driftScore < 0) driftScore = 0;
+
+            driftTime = 0f;
         }
 
         notifyObservers();
@@ -143,41 +173,61 @@ public class Car implements Subject {
         return currentSpeed;
     }
 
+    public float getDriftScore() {
+        return driftScore;
+    }
+
     public Node getNode() {
         return carNode;
     }
 
+    // 💨 HUMO BIEN COLOCADO EN RUEDAS
     private void createSmoke() {
 
-        smoke = new ParticleEmitter("Smoke", ParticleMesh.Type.Triangle, 80);
+        smokeL = new ParticleEmitter("SmokeL", ParticleMesh.Type.Triangle, 40);
+        smokeR = new ParticleEmitter("SmokeR", ParticleMesh.Type.Triangle, 40);
 
         Material mat = new Material(assetManager,
                 "Common/MatDefs/Misc/Particle.j3md");
 
-        smoke.setMaterial(mat);
+        smokeL.setMaterial(mat);
+        smokeR.setMaterial(mat);
 
-        smoke.setStartColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0.6f));
-        smoke.setEndColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0f));
+        smokeL.setStartColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0.6f));
+        smokeR.setStartColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0.6f));
 
-        smoke.setStartSize(1.2f);
-        smoke.setEndSize(4.0f);
+        smokeL.setEndColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0f));
+        smokeR.setEndColor(new ColorRGBA(0.8f, 0.8f, 0.8f, 0f));
 
-        smoke.setLowLife(0.4f);
-        smoke.setHighLife(1.5f);
+        smokeL.setStartSize(1.2f);
+        smokeR.setStartSize(1.2f);
 
-        smoke.setGravity(0, 0, 0);
+        smokeL.setEndSize(4.0f);
+        smokeR.setEndSize(4.0f);
 
-        smoke.setParticlesPerSec(0);
+        smokeL.setLowLife(0.4f);
+        smokeR.setLowLife(0.4f);
 
-        smoke.setLocalTranslation(0f, 0.3f, -2.5f);
+        smokeL.setHighLife(1.5f);
+        smokeR.setHighLife(1.5f);
 
-        wheelsNode.attachChild(smoke);
+        smokeL.setGravity(0, 0, 0);
+        smokeR.setGravity(0, 0, 0);
+
+        smokeL.setParticlesPerSec(0);
+        smokeR.setParticlesPerSec(0);
+
+        smokeL.setLocalTranslation(-0.6f, 0.2f, -2.2f);
+        smokeR.setLocalTranslation(0.6f, 0.2f, -2.2f);
+
+        wheelsNode.attachChild(smokeL);
+        wheelsNode.attachChild(smokeR);
     }
 
+    // 🛞 SKID
     private void createSkidMark(Vector3f pos) {
 
         Box b = new Box(0.35f, 0.01f, 2.0f);
-
         Geometry g = new Geometry("skid", b);
 
         Material mat = new Material(assetManager,
@@ -186,7 +236,6 @@ public class Car implements Subject {
         mat.setColor("Color", new ColorRGBA(0, 0, 0, 0.8f));
 
         g.setMaterial(mat);
-
         g.setLocalTranslation(pos.x, 0.02f, pos.z);
 
         if (carNode.getParent() != null) {
@@ -204,7 +253,7 @@ public class Car implements Subject {
     @Override
     public void notifyObservers() {
         for (Observer o : observers) {
-            o.update(getSpeed());
+            o.update(getSpeed(), drifting, 0, carNode.getWorldTranslation(), driftScore);
         }
     }
 }

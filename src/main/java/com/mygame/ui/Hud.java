@@ -43,7 +43,7 @@ public class Hud {
     }
 
     // ✅ AHORA SÍ: agregamos position
-    public void update(float speed, boolean drifting, int cameraMode, Vector3f position) {
+    public void update(float speed, boolean drifting, int cameraMode, Vector3f position, float driftScore) {
 
         speedText.setText("Speed: " + (int) speed + " km/h");
 
@@ -58,5 +58,13 @@ public class Hud {
                 "Y: " + String.format("%.2f", position.y) + "\n" +
                 "Z: " + String.format("%.2f", position.z)
         );
+
+        debugText.setText(
+        "DRIFT SCORE: " + (int) driftScore + "\n" +
+        "X: " + String.format("%.2f", position.x) + "\n" +
+        "Y: " + String.format("%.2f", position.y) + "\n" +
+        "Z: " + String.format("%.2f", position.z)
+        );
     }
+    
 }
