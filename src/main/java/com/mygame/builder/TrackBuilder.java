@@ -35,7 +35,7 @@ public class TrackBuilder {
     // 🗺️ CARGAR MAPA REAL
     private void loadMap() {
 
-        map = assetManager.loadModel("Scenes/driftracetrack.glb");
+        map = assetManager.loadModel("Scenes/drift_tracks.glb");
 
         map.setLocalTranslation(0, 0, 0);
         map.setLocalScale(5f); // ajusta aquí si está grande/pequeño

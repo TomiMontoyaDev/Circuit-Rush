@@ -37,8 +37,13 @@ public class Car implements Subject {
 
     private float driftFactor = 1f;
 
+    private float heading = FastMath.PI;
+
+    private final Vector3f velocity = new Vector3f();
+
     private ParticleEmitter smokeL;
     private ParticleEmitter smokeR;
+    private ParticleEmitter driftTail;
 
     private final List<Observer> observers = new ArrayList<>();
     private final List<Geometry> skidMarks = new ArrayList<>();
@@ -59,17 +64,18 @@ public class Car implements Subject {
         carNode.attachChild(carModel);
 
         // 🚗 SPAWN (NO TOCADO COMO PEDISTE)
-        carNode.setLocalTranslation(-262, 5f, 420);
+        carNode.setLocalTranslation(-239, 5f, 4);
 
         // 🧭 ORIENTACIÓN INICIAL
         carNode.setLocalRotation(
-                new Quaternion().fromAngles(0, FastMath.PI, 0)
+            new Quaternion().fromAngles(0, heading, 0)
         );
 
         // 🎯 nodo de efectos alineado al carro
         carNode.attachChild(wheelsNode);
 
         createSmoke();
+        createDriftTail();
     }
 
     public void move(
@@ -80,54 +86,106 @@ public class Car implements Subject {
             float tpf) {
 
         float rotation = strategy.getRotationSpeed();
+        float steerInput = 0f;
+
+        if (left) {
+            steerInput += 1f;
+        }
+
+        if (right) {
+            steerInput -= 1f;
+        }
 
         // 💨 DRIFT MODE
         if (drifting) {
-            rotation = 6.5f;
-            driftFactor = 0.65f;
+            rotation *= 1.35f;
+            driftFactor = 0.38f;
 
-            smokeL.setParticlesPerSec(35);
-            smokeR.setParticlesPerSec(35);
+            smokeL.setParticlesPerSec(42);
+            smokeR.setParticlesPerSec(42);
+            driftTail.setParticlesPerSec(72);
 
         } else {
             driftFactor = 1f;
 
             smokeL.setParticlesPerSec(0);
             smokeR.setParticlesPerSec(0);
+            driftTail.setParticlesPerSec(0);
         }
+
+        float speedFactor = FastMath.clamp(
+            Math.abs(currentSpeed) / maxSpeed,
+            0.15f,
+            1f
+        );
+
+        heading += steerInput * rotation * speedFactor * tpf;
+        carNode.setLocalRotation(
+            new Quaternion().fromAngles(0, heading, 0)
+        );
+
+        Vector3f forwardDir =
+            carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
+
+        Vector3f rightDir =
+            carNode.getLocalRotation().mult(Vector3f.UNIT_X);
 
         // 🚀 SPEED
         if (forward) {
-            currentSpeed += acceleration * tpf;
+            velocity.addLocal(
+                forwardDir.mult(acceleration * tpf)
+            );
         } else if (backward) {
-            currentSpeed -= brakePower * tpf;
-        } else {
-            if (currentSpeed > 0) {
-                currentSpeed -= drag * tpf;
-                if (currentSpeed < 0) currentSpeed = 0;
-            } else {
-                currentSpeed += drag * tpf;
-                if (currentSpeed > 0) currentSpeed = 0;
-            }
+            velocity.addLocal(
+                forwardDir.mult(-brakePower * tpf)
+            );
         }
 
-        currentSpeed = FastMath.clamp(currentSpeed, -maxReverseSpeed, maxSpeed);
+        if (steerInput != 0f) {
+            float driftPush = drifting ? 15f : 6f;
+            velocity.addLocal(
+                rightDir.mult(steerInput * driftPush * speedFactor * tpf)
+            );
+        }
+
+        Vector3f forwardVelocity =
+            forwardDir.mult(velocity.dot(forwardDir));
+
+        Vector3f lateralVelocity =
+            velocity.subtract(forwardVelocity);
+
+        float grip = drifting ? 0.32f : 0.82f;
+
+        velocity.set(
+            forwardVelocity.add(lateralVelocity.mult(grip))
+        );
+
+        float dragFactor = FastMath.clamp(
+            1f - drag * tpf * (forward || backward ? 0.018f : 0.06f),
+            0f,
+            1f
+        );
+
+        velocity.multLocal(dragFactor);
+
+        if (velocity.lengthSquared() < 0.001f) {
+            velocity.set(Vector3f.ZERO);
+        }
+
+        currentSpeed = FastMath.clamp(
+            velocity.dot(forwardDir),
+            -maxReverseSpeed,
+            maxSpeed
+        );
 
         // 🚗 MOVIMIENTO
-        Vector3f forwardDir =
-                carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
-
         Vector3f movement =
-                forwardDir.mult(currentSpeed * tpf * driftFactor);
+            velocity.mult(tpf * driftFactor);
 
         carNode.move(movement);
 
-        // 🔁 ROTACIÓN
-        if (left) carNode.rotate(0, rotation * tpf, 0);
-        if (right) carNode.rotate(0, -rotation * tpf, 0);
-
         // 🛞 SKID REAL (ruedas traseras)
-        if (drifting && Math.abs(currentSpeed) > 10f && Math.random() > 0.5f) {
+        if (drifting && Math.abs(currentSpeed) > 10f && lateralVelocity.length() > 1.5f && Math.random() > 0.45f) {
 
             Vector3f rearOffset =
                     carNode.getLocalRotation()
@@ -143,8 +201,9 @@ public class Car implements Subject {
 
             driftTime += tpf;
 
-            float speedFactor = Math.abs(currentSpeed) / maxSpeed;
-            driftScore += speedFactor * speedFactor * 120f * tpf;
+            float driftSpeedFactor = Math.abs(currentSpeed) / maxSpeed;
+            float slipFactor = FastMath.clamp(lateralVelocity.length() / 30f, 0f, 1f);
+            driftScore += (driftSpeedFactor * driftSpeedFactor * 90f + slipFactor * 35f) * tpf;
 
         } else {
 
@@ -158,10 +217,15 @@ public class Car implements Subject {
     }
 
     public void accelerate() {
+        Vector3f forwardDir =
+            carNode.getLocalRotation().mult(Vector3f.UNIT_Z);
+
+        velocity.addLocal(forwardDir.mult(25f));
+
         currentSpeed = FastMath.clamp(
-                currentSpeed + 25f,
-                -maxReverseSpeed,
-                maxSpeed * 1.4f
+            velocity.dot(forwardDir),
+            -maxReverseSpeed,
+            maxSpeed * 1.4f
         );
     }
 
@@ -222,6 +286,32 @@ public class Car implements Subject {
 
         wheelsNode.attachChild(smokeL);
         wheelsNode.attachChild(smokeR);
+    }
+
+    private void createDriftTail() {
+
+        driftTail = new ParticleEmitter("DriftTail", ParticleMesh.Type.Triangle, 60);
+
+        Material mat = new Material(assetManager,
+                "Common/MatDefs/Misc/Particle.j3md");
+
+        driftTail.setMaterial(mat);
+
+        driftTail.setStartColor(new ColorRGBA(0.75f, 0.75f, 0.75f, 0.7f));
+        driftTail.setEndColor(new ColorRGBA(0.75f, 0.75f, 0.75f, 0f));
+
+        driftTail.setStartSize(1.4f);
+        driftTail.setEndSize(6.5f);
+
+        driftTail.setLowLife(0.45f);
+        driftTail.setHighLife(1.6f);
+
+        driftTail.setGravity(0, 0, 0);
+        driftTail.setParticlesPerSec(0);
+
+        driftTail.setLocalTranslation(0f, 0.25f, -3.2f);
+
+        wheelsNode.attachChild(driftTail);
     }
 
     // 🛞 SKID
