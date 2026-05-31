@@ -36,10 +36,27 @@ public class Car implements Subject {
     private float driftTime = 0f;
 
     private float driftFactor = 1f;
+    private float driftTargetFactor = 1f;
+    private float driftLerpSpeed = 9.0f; // how fast driftFactor approaches target (aggressive onset)
 
     private float heading = FastMath.PI;
 
     private final Vector3f velocity = new Vector3f();
+
+    // tuning: separate lateral grip handling
+    private float baseLateralGrip = 0.9f;
+    private float driftLateralGrip = 0.14f; // mucho más suelto en drift
+
+    // front/rear movement factors for drift feel without speed boost
+    private float frontMoveFactorDrift = 1f;
+    private float rearMoveFactorDrift = 1f;
+
+    // input smoothing for more natural controls
+    private float steerSmoothed = 0f;
+    private float steerLerp = 6.0f; // higher = faster to target
+
+    private float engineForceSmoothed = 0f;
+    private float engineLerp = 5.5f;
 
     private ParticleEmitter smokeL;
     private ParticleEmitter smokeR;
@@ -96,6 +113,10 @@ public class Car implements Subject {
             steerInput -= 1f;
         }
 
+        // suavizar la entrada de volante para evitar saltos bruscos
+        steerSmoothed = FastMath.interpolateLinear(steerLerp * tpf, steerSmoothed, steerInput);
+        float steerValue = steerSmoothed;
+
         float speedRatio = FastMath.clamp(
                 Math.abs(currentSpeed) / maxSpeed,
                 0f,
@@ -104,14 +125,14 @@ public class Car implements Subject {
 
         // 💨 Modo drift: soltamos agarre atrás y hacemos la respuesta más viva
         if (drifting) {
-            driftFactor = 1f;
+            driftTargetFactor = 1f;
 
-            smokeL.setParticlesPerSec(48);
-            smokeR.setParticlesPerSec(48);
-            driftTail.setParticlesPerSec(84);
+            smokeL.setParticlesPerSec(80);
+            smokeR.setParticlesPerSec(80);
+            driftTail.setParticlesPerSec(160);
 
         } else {
-            driftFactor = 1f;
+            driftTargetFactor = 1f;
 
             smokeL.setParticlesPerSec(0);
             smokeR.setParticlesPerSec(0);
@@ -119,10 +140,10 @@ public class Car implements Subject {
         }
 
         // 🧭 El giro depende de la velocidad: más rápido = menos giro brusco
-        float steeringStrength = 2.85f - (1.55f * speedRatio);
+        float steeringStrength = 3.2f - (1.6f * speedRatio);
 
         if (drifting) {
-            steeringStrength += 0.85f;
+            steeringStrength += 2.4f; // más responsivo al girar durante drift para mantener el frente pegado
         }
 
         float reverseSteering = currentSpeed < -1f ? -1f : 1f;
@@ -139,24 +160,24 @@ public class Car implements Subject {
                 carNode.getLocalRotation().mult(Vector3f.UNIT_X);
 
         // 🚀 Empuje principal: aceleración progresiva para que no se sienta cortada
-        float engineForce = 0f;
-
+        float engineForceTarget = 0f;
         if (forward) {
-            engineForce = acceleration * (1f - (0.35f * speedRatio));
+            engineForceTarget = acceleration * (1f - (0.35f * speedRatio));
         } else if (backward) {
-            engineForce = -brakePower * (currentSpeed > 0f ? 1f : 0.65f);
+            engineForceTarget = -brakePower * (currentSpeed > 0f ? 1f : 0.65f);
         }
 
-        velocity.addLocal(
-                forwardDir.mult(engineForce * tpf)
-        );
+        // suavizar cambios de fuerza del motor para sensación más natural
+        engineForceSmoothed = FastMath.interpolateLinear(engineLerp * tpf, engineForceSmoothed, engineForceTarget);
+        velocity.addLocal(forwardDir.mult(engineForceSmoothed * tpf));
 
         // 🪶 El giro mete inercia lateral; en drift esa inercia sube bastante
-        if (steerInput != 0f) {
-            float driftPush = drifting ? 18f : 8f;
-            float lateralBoost = driftPush + (speedRatio * (drifting ? 12f : 5f));
+        if (Math.abs(steerValue) > 0.001f) {
+            // reducir sensibilidad lateral directa y usar steerValue suavizado
+            float driftPush = drifting ? 28f : 6f;
+            float lateralBoost = driftPush + (speedRatio * (drifting ? 30f : 4f));
             velocity.addLocal(
-                    rightDir.mult(steerInput * lateralBoost * tpf)
+                rightDir.mult(steerValue * lateralBoost * tpf)
             );
         }
 
@@ -166,14 +187,25 @@ public class Car implements Subject {
         Vector3f lateralVelocity =
                 velocity.subtract(forwardVelocity);
 
-        // 🛞 Grip: en drift el coche pierde agarre atrás, pero no se frena de golpe
-        float grip = drifting ? 0.44f : 0.90f;
-        grip -= speedRatio * (drifting ? 0.12f : 0.05f);
-        grip = FastMath.clamp(grip, drifting ? 0.30f : 0.78f, drifting ? 0.56f : 0.95f);
+        // 🛞 Grip: separamos agarre lateral y lo adaptamos según velocidad y drift
+        float lateralGrip = drifting ? driftLateralGrip : baseLateralGrip;
+        lateralGrip -= speedRatio * (drifting ? 0.22f : 0.05f);
+        lateralGrip = FastMath.clamp(lateralGrip, drifting ? 0.08f : 0.78f, 0.95f);
 
         velocity.set(
-                forwardVelocity.add(lateralVelocity.mult(grip))
+            forwardVelocity.add(lateralVelocity.mult(lateralGrip))
         );
+
+        // 🧭 Yaw inducido por deslizamiento: ayuda a mantener/controlar el derrape
+        float slipAmount = lateralVelocity.length();
+        if (slipAmount > 0.001f) {
+            float slipSign = FastMath.sign(lateralVelocity.dot(rightDir));
+            // reducir el efecto del yaw inducido por slip durante drift para que el frente siga la dirección
+            float yawMultiplier = drifting ? 0.8f : 0.6f;
+            float yawFromSlip = slipSign * slipAmount * 0.06f * yawMultiplier;
+            heading += yawFromSlip * tpf;
+            carNode.setLocalRotation(new Quaternion().fromAngles(0, heading, 0));
+        }
 
         // 🌬️ Drag suave: deja que la velocidad caiga de forma natural
         float dragFactor = FastMath.clamp(
@@ -194,9 +226,14 @@ public class Car implements Subject {
                 maxSpeed
         );
 
-        // 🚗 Movimiento final: ya no reducimos artificialmente la traslación al derrapar
-        Vector3f movement =
-                velocity.mult(tpf * driftFactor);
+        // 🚗 Movimiento final: suavizamos driftFactor hacia el objetivo y aplicamos
+        driftFactor = FastMath.interpolateLinear(driftLerpSpeed * tpf, driftFactor, driftTargetFactor);
+
+        // separamos movimiento frontal (pegado a la dirección) y trasero (suelto)
+        Vector3f frontMovement = forwardVelocity.mult(tpf * driftFactor * (drifting ? frontMoveFactorDrift : 1f));
+        Vector3f rearMovement = lateralVelocity.mult(tpf * (drifting ? rearMoveFactorDrift : 1f));
+
+        Vector3f movement = frontMovement.add(rearMovement);
 
         carNode.move(movement);
 
@@ -246,7 +283,14 @@ public class Car implements Subject {
     }
 
     public void setDrifting(boolean drifting) {
+        if (drifting && !this.drifting) {
+            // entering drift: give a larger lateral kick to help onset
+            Vector3f rightDir = carNode.getLocalRotation().mult(Vector3f.UNIT_X);
+            velocity.addLocal(rightDir.mult(12f * (currentSpeed >= 0 ? 1f : -1f)));
+        }
+
         this.drifting = drifting;
+        // target drift visual/physics intensity will be handled in move()
     }
 
     public float getSpeed() {
