@@ -49,6 +49,7 @@ dependencies {
   // Core JME
   implementation "org.jmonkeyengine:jme3-core:$jmeVer"
   implementation "org.jmonkeyengine:jme3-desktop:$jmeVer"
+    implementation "org.jmonkeyengine:jme3-jbullet:$jmeVer"
   // Mac OS with LWJGL 3 doesn't allow AWT/Swing
   if (!System.getProperty("os.name").toLowerCase().contains("mac")) {
     implementation "org.jmonkeyengine:jme3-awt-dialogs:$jmeVer"

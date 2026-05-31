@@ -1,6 +1,10 @@
 package com.mygame.builder;
 
 import com.jme3.asset.AssetManager;
+import com.jme3.bullet.BulletAppState;
+import com.jme3.bullet.control.RigidBodyControl;
+import com.jme3.bullet.PhysicsSpace;
+import com.jme3.bullet.util.CollisionShapeFactory;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
@@ -12,6 +16,7 @@ public class TrackBuilder {
 
     private final AssetManager assetManager;
     private final Node rootNode;
+    private final PhysicsSpace physicsSpace;
 
     // 🎮 gameplay data
     private final List<Vector3f> checkpoints = new ArrayList<>();
@@ -19,9 +24,10 @@ public class TrackBuilder {
 
     private Spatial map;
 
-    public TrackBuilder(AssetManager assetManager, Node rootNode) {
+    public TrackBuilder(AssetManager assetManager, Node rootNode, PhysicsSpace physicsSpace) {
         this.assetManager = assetManager;
         this.rootNode = rootNode;
+        this.physicsSpace = physicsSpace;
     }
 
     public void build() {
@@ -39,6 +45,10 @@ public class TrackBuilder {
 
         map.setLocalTranslation(0, 0, 0);
         map.setLocalScale(5f); // ajusta aquí si está grande/pequeño
+
+        RigidBodyControl trackBody = new RigidBodyControl(CollisionShapeFactory.createMeshShape(map), 0f);
+        map.addControl(trackBody);
+        physicsSpace.add(trackBody);
 
         rootNode.attachChild(map);
     }

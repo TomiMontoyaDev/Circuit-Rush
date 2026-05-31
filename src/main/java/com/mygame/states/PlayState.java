@@ -3,6 +3,7 @@ package com.mygame.states;
 import com.jme3.app.Application;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.BaseAppState;
+import com.jme3.bullet.BulletAppState;
 import com.mygame.entities.Car;
 import com.mygame.factory.VehicleFactory;
 import com.mygame.input.InputHandler;
@@ -17,22 +18,26 @@ public class PlayState extends BaseAppState {
     private CameraManager camera;
     private InputHandler input;
     private Car car;
+    private BulletAppState bulletAppState;
 
     @Override
 protected void initialize(Application app) {
 
     SimpleApplication sa = (SimpleApplication) app;
 
+    bulletAppState = new BulletAppState();
+    sa.getStateManager().attach(bulletAppState);
+
     // 🧹 limpiar solo UI del menú
     sa.getGuiNode().detachAllChildren();
 
     // 🚗 mundo
-    TrackBuilder builder = new TrackBuilder(sa.getAssetManager(), sa.getRootNode());
+    TrackBuilder builder = new TrackBuilder(sa.getAssetManager(), sa.getRootNode(), bulletAppState.getPhysicsSpace());
     builder.build();
 
     LightManager.createLights(sa.getRootNode());
 
-    car = VehicleFactory.createCar(sa.getAssetManager());
+    car = VehicleFactory.createCar(sa.getAssetManager(), bulletAppState.getPhysicsSpace());
     sa.getRootNode().attachChild(car.getNode());
 
     input = new InputHandler(sa.getInputManager());
@@ -79,5 +84,10 @@ public void update(float tpf) {
 
     @Override protected void onEnable() {}
     @Override protected void onDisable() {}
-    @Override protected void cleanup(Application app) {}
+    @Override protected void cleanup(Application app) {
+        if (bulletAppState != null) {
+            ((SimpleApplication) app).getStateManager().detach(bulletAppState);
+            bulletAppState = null;
+        }
+    }
 }
